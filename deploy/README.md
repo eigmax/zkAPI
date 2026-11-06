@@ -1,5 +1,10 @@
 # Deploying on GOAT testnet3 and Metis Sepolia
 
+> **Parked.** This guide belongs to an earlier design, in which we ran our own
+> router, users paid with zkAPI credits, and the router posted a bond on chain.
+> The current plan works beside external routers (see the
+> [README](../README.md)) and needs none of it. It is kept for reference.
+
 What can be deployed today, what has to change first, and who maintains each
 part once it runs.
 

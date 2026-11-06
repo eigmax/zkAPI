@@ -153,7 +153,7 @@ these figures for its two Groth16 circuits (`protocol/docs/src/proofs.md`,
 |---|---|---|---|
 | Proves | the payer holds a funded, unspent note | a note's final balance and exit | a genuine provider TLS session, model and usage |
 | Statement | 23,507 constraints | 20,545 constraints | 4.9 M MIPS cycles, then Ziren's recursion and wrap |
-| Who proves | the user's device, every request | the user, once per exit | the router, about 1% of requests |
+| Who proves | the user's device, every request | the user, once per exit | us, only for disputed or sampled calls |
 | Proving time | not published | about 279 ms (hardware not stated) | 5.2 s GPU + 11.5 s CPU |
 | Proving key | not published | 4.26 MB | Groth16 circuit, loaded once in about 50 s |
 | Proof | 256 bytes | 256 bytes | 260 bytes (4-byte verifier selector + 256) |
@@ -162,12 +162,12 @@ these figures for its two Groth16 circuits (`protocol/docs/src/proofs.md`,
 Reading:
 
 - The two kinds of proof answer different questions. zkAPI's keep the payer
-  anonymous; this one keeps the router honest. Neither replaces the other,
-  and the vault is unchanged.
+  anonymous; this one checks what a router reported or did. Neither
+  replaces the other.
 - An audit proof takes about 60 times the time zkAPI reports for a
-  withdrawal proof, whose hardware is not stated. It runs on the router's
-  machines instead of the user's, and only for the sampled requests: at a 1%
-  rate, about 0.17 s of router compute per request served.
+  withdrawal proof, whose hardware is not stated. It runs on our machines
+  instead of the user's, and only for disputed or sampled calls: at 1% of
+  calls, about 0.17 s of compute per call served.
 - Both are BN254 Groth16 proofs checked with the same four-pairing equation.
   Ziren's verifier has 3 public inputs against the withdrawal's 16, so its gas
   should be the same order as zkAPI's, about 0.2–0.3 M. This is an estimate;
