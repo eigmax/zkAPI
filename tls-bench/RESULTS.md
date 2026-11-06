@@ -70,8 +70,25 @@ of the process carries the CUDA start-up and is left out. Settings: shard size
 | api.anthropic.com, root anchor (P-384) | 91.75 M | 31 | 3 | 9.88 / 8.19 / 8.16 s | **8.7 s** |
 | api.deepseek.com (RSA-2048), intermediate pinned | 8.47 M | 6 | 3 | 23.95 / 27.32 / 22.70 s | **24.7 s** |
 
-Every result is one compressed proof of 290,530 bytes (284 KiB). Shrink and
-the Groth16/PLONK wrap were not run.
+Every result is one compressed proof of 290,530 bytes (284 KiB).
+
+### Through shrink and wrap
+
+A second process ran stage `wrap`: the same core and compress, then shrink,
+then the wrap over BN254, which is the STARK that the Groth16 or PLONK circuit
+verifies. Every wrap proof was verified. Order: `anthropic-pinned` four times
+(the first cold, left out), then `deepseek-pinned` twice, then `anthropic`
+twice.
+
+| Capture | Core + compress | Shrink | Wrap | Total, mean |
+|---|---|---|---|---|
+| Anthropic, intermediate pinned | 3.81 / 3.76 / 3.63 s | 0.41 / 0.33 / 0.35 s | 1.00 / 1.17 / 1.22 s | **5.2 s** |
+| Anthropic, root anchor | 9.08 / 7.96 s | 0.35 / 0.40 s | 0.82 / 1.90 s | **10.3 s** |
+| DeepSeek, intermediate pinned | 22.09 / 19.12 s | 0.37 / 0.36 s | 2.18 / 0.87 s | **22.5 s** |
+
+Shrink takes about 0.35 s and wrap 0.8–2.2 s, whatever the capture: both
+prove a fixed-shape verifier circuit. Together they add about 1.5 s to every
+proof. The Groth16 or PLONK proof over the wrap (gnark) was not run.
 
 Reading:
 
@@ -91,7 +108,7 @@ Reading:
 
 - Certificate validity periods and revocation (the guest has no clock).
 - HelloRetryRequest, other cipher suites or groups (the client offers only these).
-- Shrink and wrap times, and proving on more than one GPU.
+- The Groth16/PLONK proof over the wrap, and proving on more than one GPU.
 
 ## Run
 
