@@ -25,12 +25,12 @@ router. For each request we match three sources:
 The result is a discrepancy list. Each item gives the amount, the evidence
 source, how far it could be checked, and who should resolve it.
 
-Every line carries one of three states:
+Every line says how far its figures could be checked:
 
 | State | Meaning |
 |---|---|
 | Router-reported | The figure comes only from the router. |
-| Bill reconciled | The customer's log, the router's record, the invoice and the price list agree. |
+| Bill checked | Checked against the customer's log, the invoice and the price list. |
 | Upstream verified | Checked against evidence the router does not control. |
 
 ### Without the router's cooperation
