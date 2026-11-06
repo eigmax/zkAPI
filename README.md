@@ -76,7 +76,6 @@ are not zero-knowledge and would leak the TLS secrets.
 | Token recount | planned |
 | zkTLS proof of the router's API reply | planned; the session check it needs is measured |
 | Witness proxy with a cooperating router | planned; needs a partner router |
-| [`deploy/`](deploy) | parked: written for an earlier design that ran its own router |
 
 ## Measured so far
 
@@ -95,5 +94,3 @@ Details and the remaining gaps are in
 - [`tls-bench/`](tls-bench): checks a recorded TLS 1.3 session with a public
   LLM API inside a Ziren guest and reports the cycles of each step and the
   proving time.
-- [`deploy/`](deploy): parked. Deploying zkAPI and Ziren's verifier on GOAT
-  testnet3 and Metis Sepolia, for the earlier design.
