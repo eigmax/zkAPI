@@ -1,6 +1,7 @@
-# TLS 1.3 session check in Ziren: cycles
+# TLS 1.3 session check in Ziren: cycles and proving time
 
-Execution only (no proof), Ziren at `a3c5a48a`, interpreter (`ZIREN_DISABLE_JIT=1`).
+Cycles: execution only, Ziren at `a3c5a48a`, interpreter (`ZIREN_DISABLE_JIT=1`).
+Proving time: see [Proving time](#proving-time-one-gpu).
 Each capture is a real TLS 1.3 session (`TLS_AES_128_GCM_SHA256`, X25519) to a
 public LLM API, sent without credentials, so the reply is a 401/403/400. The
 handshake and record layer are the same as for an authenticated call.
@@ -53,12 +54,44 @@ RSA-2048 signatures cost about 1.77 M cycles each (u256×2048 precompile).
 - No AES precompile is needed at these sizes: AES-GCM is under 15 % of a
   pinned-anchor handshake.
 
+## Proving time (one GPU)
+
+One RTX 5090, Ziren's GPU prover built against Ziren `main` at `a4d47079`,
+stage `compress` (core shards plus the recursive compression into one proof;
+the compression overlaps the core proof, so it adds almost nothing after it).
+One process proved the three captures in this order: `anthropic-pinned` four
+times, `deepseek-pinned` three times, `anthropic` three times. The first proof
+of the process carries the CUDA start-up and is left out. Settings: shard size
+2^22 + 1, `TRACE_GEN_WORKERS=16`, verification of the result off.
+
+| Capture | Cycles (prover) | Shards | Proofs | Time per proof | Mean |
+|---|---|---|---|---|---|
+| api.anthropic.com, intermediate pinned | 4.99 M | 5 | 3 warm | 2.37 / 3.99 / 3.83 s | **3.4 s** |
+| api.anthropic.com, root anchor (P-384) | 91.75 M | 31 | 3 | 9.88 / 8.19 / 8.16 s | **8.7 s** |
+| api.deepseek.com (RSA-2048), intermediate pinned | 8.47 M | 6 | 3 | 23.95 / 27.32 / 22.70 s | **24.7 s** |
+
+Every result is one compressed proof of 290,530 bytes (284 KiB). Shrink and
+the Groth16/PLONK wrap were not run.
+
+Reading:
+
+- A pinned-anchor handshake proves in about 3.4 s. The cold first proof took
+  13.9 s.
+- The P-384 chain is 18 times the cycles but only 2.6 times the time
+  (11 MHz against 1.5 MHz). A small proof is dominated by fixed costs per
+  proof, not by its cycles.
+- The RSA chain proves 7 times slower than the P-256 one for 1.7 times the
+  cycles. Execution alone takes 2.1–3.8 s here against 0.05 s for the P-256
+  capture. The patched `rsa` crate runs its big-number division in
+  unconstrained blocks (38 of them, with 77 hint reads). Those instructions
+  are not counted as cycles, but they run again every time the prover
+  re-executes the guest. This is the likely cause and has not been profiled.
+
 ## Not covered
 
 - Certificate validity periods and revocation (the guest has no clock).
 - HelloRetryRequest, other cipher suites or groups (the client offers only these).
-- Proving time: these are executor cycles. Precompile calls cost few cycles but
-  add rows to their own tables.
+- Shrink and wrap times, and proving on more than one GPU.
 
 ## Run
 
