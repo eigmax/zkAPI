@@ -88,7 +88,39 @@ twice.
 
 Shrink takes about 0.35 s and wrap 0.8–2.2 s, whatever the capture: both
 prove a fixed-shape verifier circuit. Together they add about 1.5 s to every
-proof. The Groth16 or PLONK proof over the wrap (gnark) was not run.
+proof.
+
+### Groth16 over the wrap
+
+The wrap proof of the pinned Anthropic capture was proven with Ziren's gnark
+Groth16 circuit (`v2.0.0`, 29,729,239 constraints) on the CPU: an AMD EPYC
+9355 with 64 threads allotted. Two separate processes each proved it once.
+
+| Step | Run 1 | Run 2 |
+|---|---|---|
+| Load the circuit (R1CS) | 42.5 s | 47.9 s |
+| Load the proving key | 4.4 s | 3.9 s |
+| Witness | 0.74 s | 0.66 s |
+| Constraint solver | 5.44 s | 5.60 s |
+| Prover | 5.89 s | 6.08 s |
+| **Proof, after loading** | **11.3 s** | **11.7 s** |
+| gnark verification | 0.56 ms | 0.54 ms |
+
+The on-chain proof is 260 bytes: a 4-byte verifier selector and eight words,
+as `ZKMVerifierGroth16.sol` decodes it.
+
+- The proof costs about 11.5 s per wrap, whatever the capture, since the
+  circuit has a fixed shape. The ~50 s load happens once per process. Whether
+  later proofs in the same process skip it was not measured.
+- A pinned P-256 handshake therefore costs about 5.2 s on the GPU (through
+  wrap) plus 11.5 s on the CPU (Groth16).
+- The wrap must be proven with `VERIFY_VK=true`. A wrap proven with it off
+  fails the circuit (`constraint #1165056 is not satisfied`), because the
+  circuit checks the recursion keys against the vk root.
+- Not done: the bench's own `verify_groth16_bn254` rejected the program's
+  verifying key ("does not match the inner groth16 bn254 proof's committed
+  verifying key"), so the binding to the program key is not checked yet.
+  gnark's verification inside the prover passed.
 
 Reading:
 
@@ -108,7 +140,8 @@ Reading:
 
 - Certificate validity periods and revocation (the guest has no clock).
 - HelloRetryRequest, other cipher suites or groups (the client offers only these).
-- The Groth16/PLONK proof over the wrap, and proving on more than one GPU.
+- PLONK over the wrap, and proving on more than one GPU.
+- The gas of verifying the Groth16 proof on chain.
 
 ## Run
 
