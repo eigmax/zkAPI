@@ -1,7 +1,8 @@
 # zkAPI
 
-Reconciliation and dispute evidence for LLM calls made through third-party
-routers such as [OpenRouter](https://openrouter.ai), with zkTLS proofs from the
+Reconcile third-party LLM bills, explain discrepancies, and attach verifiable
+evidence where available. The bills are for calls made through routers such as
+[OpenRouter](https://openrouter.ai); the evidence is checked in the
 [Ziren](https://github.com/ProjectZKM/Ziren) zkVM.
 
 ## The service
@@ -22,34 +23,53 @@ router. For each request we match three sources:
   model, provider, token counts, cost and the upstream id;
 - the invoice and the price list.
 
-The result is a discrepancy list. Each item gives the amount, the evidence
-source, how far it could be checked, and who should resolve it.
+The result is a discrepancy list. Each line gives the amount, the next action,
+and two separate fields: its resolution status and its evidence source.
 
-Every line says how far its figures could be checked:
-
-| State | Meaning |
+| Status | Meaning |
 |---|---|
-| Router-reported | The figure comes only from the router. |
-| Bill checked | Checked against the customer's log, the invoice and the price list. |
-| Upstream verified | Checked against evidence the router does not control. |
+| Open | A discrepancy is flagged, not yet resolved. |
+| Confirmed | The evidence shows the charge is wrong. |
+| Corrected | Refunded, credited or rebilled. |
+
+| Evidence source | What it can show |
+|---|---|
+| Customer estimate | The customer's log and a local recount. It flags a line but cannot prove it. |
+| Gateway report | The router's records and invoice: its own statement. |
+| Provider aggregate | BYOK usage totals by model, key and period. It cannot verify a single invoice line. |
+| Provider per-call evidence | A witnessed upstream exchange bound to the call. |
+
+A recount that differs from the bill opens a line; it does not settle it,
+since provider token counts can differ from a local recount for legitimate
+reasons.
+
+The reconciliation needs three things from the router: request ids that join
+the customer's log to its records, per-call usage records we can read, and the
+bill and price schedule for the same period. None of the three has been tested
+with OpenRouter yet; so far only a TLS handshake with openrouter.ai has been
+checked.
 
 ### Without the router's cooperation
 
 - **Reconciliation.** Find duplicate charges, prices that do not match the
   list, and fallbacks to a model that was not allowed. The model and the
   provider are router-reported.
-- **Token recount.** Recount input tokens from the customer's prompts with the
-  provider's tokenizer. Output tokens can be recounted roughly from the reply
+- **Token recount.** Estimate input tokens from the customer's prompts with
+  the provider's tokenizer. Output tokens can be recounted roughly from the reply
   text. Reasoning tokens are never visible to the customer and cannot be
   recounted.
 - **Provider reports.** For calls made with the customer's own provider keys
   (BYOK), compare with the provider's usage reports. These are totals by
   model, key and time, not per request.
-- **zkTLS proof of what the router reported.** The customer holds the keys of
-  its own TLS session with the router. A Ziren proof can show what the
-  router's API returned for a call (model, usage and cost) while hiding the
-  API key. In a dispute, the router cannot deny its own record. The proof
-  shows what the router reported, not what happened upstream.
+- **Proof of what the router reported.** A TLS session proof alone is not
+  enough here: the customer knows the session keys, so it could forge the
+  router's reply. The `GET /generation` lookup must go through an independent
+  witness that records the router's ciphertext as it arrives, or the router
+  must sign a receipt. Ziren then checks the handshake, the chain and the
+  recorded ciphertext, opens only the generation id, model, tokens and cost,
+  and binds the result to the requested generation id. The proof shows what
+  the router reported, not what happened upstream. Neither path is built
+  yet.
 
 ### With the router's cooperation
 
@@ -58,11 +78,15 @@ Every line says how far its figures could be checked:
   [proxy mode](https://tlsnotary.org/docs/protocol/proxy-mode/).
 - For a disputed call, the router proves in Ziren that it held a genuine TLS
   session with the provider, and opens only the model and usage fields.
-- The witness must record every call of the billing period, because disputes
-  are chosen afterwards.
-- The router keeps its session secrets, and the witness keeps the ciphertext,
-  for the dispute window. Together they reveal the prompts, so this needs the
+- Capture and proof are separate. Every eligible call in the agreed scope is
+  captured as it happens; only disputed calls are proven afterwards. A call
+  that was not captured cannot be proven later.
+- The scope (keys, models, period) and the retention are agreed up front. The
+  router keeps its session secrets, and the witness keeps the ciphertext, for
+  the dispute window. Together they reveal the prompts, so this needs the
   customer's data agreement.
+- The proof ties the upstream exchange to the customer's request, the response
+  it received and the billed line.
 
 Only the Groth16 wraps are shared. Ziren's core, compress and shrink proofs
 are not zero-knowledge and would leak the TLS secrets.
@@ -74,10 +98,15 @@ are not zero-knowledge and would leak the TLS secrets.
 | TLS 1.3 session check in a Ziren guest, openrouter.ai included | done: cycles and proving time, [`tls-bench/`](tls-bench) |
 | Reconciliation against OpenRouter's per-request records | planned |
 | Token recount | planned |
-| zkTLS proof of the router's API reply | planned; the session check it needs is measured |
+| Witnessed proof of the router's `/generation` reply | planned; only the handshake check is measured |
 | Witness proxy with a cooperating router | planned; needs a partner router |
 
-## Measured so far
+## TLS benchmark
+
+These numbers are for the TLS session check alone, not a product timing. The
+captured replies are unauthenticated error responses, and the binding of the
+wrap to the program's verifying key does not pass yet. An authenticated usage
+lookup has not been measured.
 
 | Step | Result |
 |---|---|
