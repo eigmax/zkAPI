@@ -145,8 +145,8 @@ Reading:
 
 ## Run
 
-Build on a machine with the Ziren toolchain, with Ziren checked out as a
-sibling of this repository:
+Build on a machine with the Ziren toolchain. Cargo fetches Ziren from GitHub at
+`a4d47079`, and the guest fetches `tlsv` from this repository:
 
 ```sh
 cargo build --release -p capture -p host

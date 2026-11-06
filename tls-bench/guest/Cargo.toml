@@ -7,8 +7,8 @@ edition = "2021"
 publish = false
 
 [dependencies]
-zkm-zkvm = { path = "../../../Ziren/crates/zkvm/entrypoint" }
-tlsv = { path = "../tlsv" }
+zkm-zkvm = { git = "https://github.com/ProjectZKM/Ziren", rev = "a4d47079b45eecb244adc27ffa3daaac57de523b" }
+tlsv = { git = "https://github.com/eigmax/zkAPI", rev = "0e9017da5d19e898fa78567e1fc9f7a5fe76b2d6" }
 
 [patch.crates-io]
 curve25519-dalek = { git = "https://github.com/ziren-patches/curve25519-dalek", branch = "patch-4.1.3" }
