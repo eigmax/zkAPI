@@ -1,0 +1,14 @@
+[workspace]
+
+[package]
+name = "zkapi-request"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+zkm-zkvm = { git = "https://github.com/ProjectZKM/Ziren", rev = "a4d47079b45eecb244adc27ffa3daaac57de523b" }
+zkapi-ziren-statement = { path = "../../statement" }
+
+[features]
+profile = ["zkapi-ziren-statement/profile"]

@@ -1,0 +1,18 @@
+[package]
+name = "zkapi-ziren-conformance"
+description = "Checks the Ziren statements against upstream zkAPI's Groth16 circuits"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+zkapi-ziren-statement = { path = "../statement" }
+zkapi-proof = { git = "https://github.com/ethereum/zkapi", rev = "6fb229af085f3156b5f25466c20de605cdcac476" }
+ark-bn254 = "0.5"
+ark-ec = "0.5"
+ark-ed-on-bn254 = "0.5"
+ark-ff = "0.5"
+ark-relations = "0.5"
+ark-std = "0.5"
+bincode = "1.3"

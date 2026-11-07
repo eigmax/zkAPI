@@ -1,3 +1,2 @@
 target/
-# Recorded sessions carry the client's X25519 secret, so they decrypt; regenerate them with `capture`.
-tls-bench/data/*.bin
+out/

@@ -1,125 +1,134 @@
-# zkAPI
+# zkAPI on Ziren
 
-Reconcile third-party LLM bills, explain discrepancies, and attach verifiable
-evidence where available. The bills are for calls made through routers such as
-[OpenRouter](https://openrouter.ai); the evidence is checked in the
-[Ziren](https://github.com/ProjectZKM/Ziren) zkVM.
+The [zkAPI](https://github.com/ethereum/zkapi) v2 request and withdrawal
+statements, proven by the [Ziren](https://github.com/ProjectZKM/Ziren) zkVM
+instead of zkAPI's circuit-specific Groth16.
 
-## The service
+zkAPI lets a user pay for API calls from an on-chain deposit without linking
+the calls to the deposit or to each other. Each call carries a request proof
+that the payer owns a funded, unspent note, and a nullifier the server accepts
+only once. When the user leaves, the vault pays out the final balance against a
+withdrawal proof. This repository keeps both statements as they are and
+replaces only the proof system.
 
-Companies buy model access through external routers. The router places each
-call, picks the provider and sends the bill. Finance gets an invoice and the
-router's own request log, and cannot tell which charges are right: whether a
-call went to the model that was asked for, whether a fallback model was used,
-and whether the tokens billed match the tokens used.
+## What changes
 
-We sit beside the call path, not in it. Routing and billing stay with the
-router. For each request we match three sources:
-
-- the customer's own log: request id, model asked for, a hash of the prompt,
-  and the router's id for the call;
-- the router's record of the call, for example OpenRouter's
-  [`GET /generation`](https://openrouter.ai/docs/api/api-reference/generations/get-generation):
-  model, provider, token counts, cost and the upstream id;
-- the invoice and the price list.
-
-The result is a discrepancy list. Each line gives the amount, the next action,
-and two separate fields: its resolution status and its evidence source.
-
-| Status | Meaning |
+| Unchanged | Replaced |
 |---|---|
-| Open | A discrepancy is flagged, not yet resolved. |
-| Confirmed | The evidence shows the charge is wrong. |
-| Corrected | Refunded, credited or rebilled. |
+| Vault, server and wallet protocol | Groth16 circuits → one Rust guest per statement |
+| Statements, public words and their encodings | Per-circuit trusted setup → Ziren's single Groth16 wrap |
+| Poseidon, Baby-JubJub and Schnorr, with upstream's parameters | Groth16 prover in the browser → Ziren prover, GPU |
+| Upstream fixtures and test vectors | Groth16 verifiers → Ziren's Groth16 verifier |
 
-| Evidence source | What it can show |
-|---|---|
-| Customer estimate | The customer's log and a local recount. It flags a line but cannot prove it. |
-| Gateway report | The router's records and invoice: its own statement. |
-| Provider aggregate | BYOK usage totals by model, key and period. It cannot verify a single invoice line. |
-| Provider per-call evidence | A witnessed upstream exchange bound to the call. |
-
-A recount that differs from the bill opens a line; it does not settle it,
-since provider token counts can differ from a local recount for legitimate
-reasons.
-
-The reconciliation needs three things from the router: request ids that join
-the customer's log to its records, per-call usage records we can read, and the
-bill and price schedule for the same period. None of the three has been tested
-with OpenRouter yet; so far only a TLS handshake with openrouter.ai has been
-checked.
-
-### Without the router's cooperation
-
-- **Reconciliation.** Find duplicate charges, prices that do not match the
-  list, and fallbacks to a model that was not allowed. The model and the
-  provider are router-reported.
-- **Token recount.** Estimate input tokens from the customer's prompts with
-  the provider's tokenizer. Output tokens can be recounted roughly from the reply
-  text. Reasoning tokens are never visible to the customer and cannot be
-  recounted.
-- **Provider reports.** For calls made with the customer's own provider keys
-  (BYOK), compare with the provider's usage reports. These are totals by
-  model, key and time, not per request.
-- **Proof of what the router reported.** A TLS session proof alone is not
-  enough here: the customer knows the session keys, so it could forge the
-  router's reply. The `GET /generation` lookup must go through an independent
-  witness that records the router's ciphertext as it arrives, or the router
-  must sign a receipt. Ziren then checks the handshake, the chain and the
-  recorded ciphertext, opens only the generation id, model, tokens and cost,
-  and binds the result to the requested generation id. The proof shows what
-  the router reported, not what happened upstream. Neither path is built
-  yet.
-
-### With the router's cooperation
-
-- The router sends its upstream traffic through a witness proxy run by another
-  party. This is the arrangement of TLSNotary's
-  [proxy mode](https://tlsnotary.org/docs/protocol/proxy-mode/).
-- For a disputed call, the router proves in Ziren that it held a genuine TLS
-  session with the provider, and opens only the model and usage fields.
-- Capture and proof are separate. Every eligible call in the agreed scope is
-  captured as it happens; only disputed calls are proven afterwards. A call
-  that was not captured cannot be proven later.
-- The scope (keys, models, period) and the retention are agreed up front. The
-  router keeps its session secrets, and the witness keeps the ciphertext, for
-  the dispute window. Together they reveal the prompts, so this needs the
-  customer's data agreement.
-- The proof ties the upstream exchange to the customer's request, the response
-  it received and the billed line.
-
-Only the Groth16 wraps are shared. Ziren's core, compress and shrink proofs
-are not zero-knowledge and would leak the TLS secrets.
+A guest reads the statement words and the witness, runs the circuit's checks
+(Q1–Q10 for a request, W1–W14 for a withdrawal), and commits the statement
+words as its public values: the `abi.encodePacked` `uint256` words. A proof is
+a 260-byte Groth16 proof over those words and the guest's verifying-key hash.
 
 ## Status
 
 | Part | State |
 |---|---|
-| TLS 1.3 session check in a Ziren guest, openrouter.ai included | done: cycles and proving time, [`tls-bench/`](tls-bench) |
-| Reconciliation against OpenRouter's per-request records | planned |
-| Token recount | planned |
-| Witnessed proof of the router's `/generation` reply | planned; only the handshake check is measured |
-| Witness proxy with a cooperating router | planned; needs a partner router |
+| Request and withdrawal statements as Ziren guests | done |
+| Conformance tests against upstream's own circuits | done |
+| Cycle cuts: hardcoded constants, BN254 Fr through `uint256_mulmod` | done |
+| Prover CLI, with a serve mode that keeps the keys loaded | done |
+| Request-proof verification inside the zkAPI server | not built; [`verify_groth16`](prover/src/lib.rs) is the check it would call |
+| Solidity adapter so the vault accepts a withdrawal proof | not built; verify gas not measured |
+| Hiding the witness from the prover (TEE) | deferred |
 
-## TLS benchmark
+## Conformance
 
-These numbers are for the TLS session check alone, not a product timing. The
-captured replies are unauthenticated error responses, and the binding of the
-wrap to the program's verifying key does not pass yet. An authenticated usage
-lookup has not been measured.
+The checks follow the circuits' gadgets, not only upstream's native helpers:
+points are checked to be on the curve, not in the subgroup; signature scalars
+and blindings are any 251-bit integers; the Schnorr challenge is the full,
+unreduced hash. [`conformance/tests/circuits.rs`](conformance/tests/circuits.rs)
+runs upstream's Groth16 circuits (`zkapi_proof::groth16`) beside the Rust
+statements:
 
-| Step | Result |
-|---|---|
-| TLS 1.3 check, intermediate pinned | 4.9–5.0 M cycles (P-256 chain; openrouter.ai 5.03 M), 8.3 M (RSA-2048) |
-| STARK proof to the wrap, one RTX 5090 | 5.2 s (P-256 pinned) |
-| Groth16 over the wrap, CPU | 11.5 s, after a one-time 50 s circuit load |
-| Proof | 260 bytes |
+| Test | Cases | Result |
+|---|---|---|
+| Valid statements | 3 requests, 5 withdrawals | accepted by both |
+| Each request fixture with one value changed | 87 | same verdict; 69 refused by both |
+| Each withdrawal fixture with one value changed | 165 | same verdict; 127 refused by both |
+| Random mutated requests | 20 | same verdict |
+| Encodings the circuit cannot take | 4 | refused |
 
-Details and the remaining gaps are in
-[`tls-bench/RESULTS.md`](tls-bench/RESULTS.md).
+## Results
+
+Measured at Ziren `a4d47079`. These are measurements of the statements, not a
+product timing.
+
+Guest cycles per proof, one fixture each:
+
+| Fixture | Arkworks | Constants hardcoded | Fr precompile |
+|---|---|---|---|
+| Signed request | 232.4 M | 192.4 M | 10.2 M |
+| Genesis request | | 158.3 M | 7.6 M |
+| Mutual-close withdrawal | | 116.0 M | 6.2 M |
+| Escape withdrawal | 131.4 M | 91.6 M | 4.7 M |
+| Ownership withdrawal | | 91.1 M | 4.3 M |
+
+In the signed request, Poseidon takes 7.0 M cycles (4.7 M of them for the
+Merkle path), the balance commitment 1.3 M and the Schnorr check 1.2 M.
+
+Proving, one RTX 5090 and 88 CPU threads, in serve mode with the keys loaded:
+
+| Fixture | Warm proof | Of which Groth16 on the CPU |
+|---|---|---|
+| Signed request | 21.5 s | 10.7–13.7 s |
+| Escape withdrawal | 24.3 s | |
+| Genesis request | 18.6 s | |
+
+The first proof in a process takes 77.4 s, mostly reading the 29.7 M-constraint
+Groth16 circuit. Every proof is 260 bytes and passes Ziren's Groth16 verifier.
+
+For comparison, upstream's circuits have 23,507 (request) and 20,545
+(withdrawal) constraints; its docs give about 279 ms to prove a withdrawal, a
+256-byte proof, and 221k gas to verify one on chain.
+
+## Trust
+
+- **The prover sees the witness.** Ziren's STARKs are not zero-knowledge, so
+  whoever runs the prover sees the note secret and could link the user's
+  calls. Either the user runs the prover, or a TEE hides the witness; the TEE
+  is deferred. Only the final Groth16 proof is shared.
+- **Ziren's setup.** Every proof rests on Ziren's Groth16 wrap and its trusted
+  setup. One setup serves every program, so zkAPI needs no ceremony of its own.
+- **The guest code.** The Rust statements must accept exactly what the
+  circuits accept; the conformance tests check this.
 
 ## Layout
 
-- [`tls-bench/`](tls-bench): checks a recorded TLS 1.3 session with a public
-  LLM API inside a Ziren guest and reports the cycles of each step and the
-  proving time.
+- [`statement/`](statement): the two statements in Rust, the field, Poseidon
+  and Baby-JubJub arithmetic, and the generated constants.
+- [`guest/request`](guest/request), [`guest/withdrawal`](guest/withdrawal): the
+  Ziren guests.
+- [`prover/`](prover): the `zkapi-ziren` CLI and the Groth16 verification a
+  server would run.
+- [`conformance/`](conformance): upstream's fixtures, the tests against its
+  circuits, and a tool that writes prover inputs.
+
+## Usage
+
+Building the guests needs Ziren's toolchain; the Groth16 step needs Go.
+
+```sh
+cargo test -p zkapi-ziren-statement
+cargo test --release -p zkapi-ziren-conformance
+
+# Write valid inputs to out/, then run or prove one.
+cargo run --release -p zkapi-ziren-conformance --bin fixtures -- out
+cargo run --release -p zkapi-ziren -- execute out/request-signed.bin
+ZKM_PROVER=cuda cargo run --release -p zkapi-ziren -- prove out/request-signed.bin out/request-signed.proof
+
+# Prove one `<input> <proof>` pair per line, keeping the keys loaded.
+cargo run --release -p zkapi-ziren -- serve < jobs.txt
+
+# Print both guests' verifying-key hashes.
+cargo run --release -p zkapi-ziren -- vkeys
+```
+
+`statement/src/constants.rs` is generated by
+`cargo run -p zkapi-ziren-statement --example constants`; the statement tests
+check each value against its derivation.

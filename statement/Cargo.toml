@@ -1,0 +1,24 @@
+[package]
+name = "zkapi-ziren-statement"
+description = "The zkAPI v2 request and withdrawal statements, checked natively for the Ziren guests"
+edition = "2021"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+ark-bn254 = "0.5"
+ark-crypto-primitives = { version = "0.5", default-features = false, features = ["sponge"] }
+ark-ec = "0.5"
+ark-ed-on-bn254 = "0.5"
+ark-ff = "0.5"
+serde = { version = "1.0", features = ["derive"] }
+sha3 = "0.10"
+
+[target.'cfg(target_os = "zkvm")'.dependencies]
+zkm-zkvm = { git = "https://github.com/ProjectZKM/Ziren", rev = "a4d47079b45eecb244adc27ffa3daaac57de523b" }
+
+[dev-dependencies]
+ark-std = "0.5"
+
+[features]
+profile = []
